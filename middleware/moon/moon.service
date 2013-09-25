@@ -1,0 +1,14 @@
+[Unit]
+Description=Moon from Cosmos Framework
+
+[Service]
+Type=forking
+WorkingDirectory=/root
+PIDFile=/tmp/moon.pid
+ExecStart=/usr/bin/python2 /root/moon.py start
+ExecStop=/usr/bin/python2 /root/moon.py stop
+ExecReload=/usr/bin/python2 /root/moon.py reload
+
+[Install]
+WantedBy=multi-user.target
+

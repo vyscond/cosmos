@@ -1,0 +1,12 @@
+{
+    "app" : "tsp"
+       
+        ,
+
+    "argv" : 
+    {
+        "instance_name"     : "ulysses16" ,
+        "generations"       : "1"         ,
+        "population_length" : "10"
+    }
+}

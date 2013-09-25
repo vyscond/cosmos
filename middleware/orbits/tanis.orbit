@@ -1,0 +1,20 @@
+{
+    "planet":
+    {
+        "name" : "tanis"
+    }
+    
+    ,
+
+    "moons" :
+    [
+        "war" 
+    ]
+    
+    ,
+
+    "moons_flight_route" :  
+    {
+        "war"        : { "ip" : "192.168.1.2" , "port" : "666" }
+    }
+}
