@@ -15,7 +15,18 @@ from signal           import SIGTERM
 
 class PROTOCOL :
     
-    END_SESSION = 'NOMORETASKS_CLOSINGCONNECTION'
+    # --- QUEUE BEHAVIOR
+    QUEUE_REMOTE = '[queue_remote]'
+    QUEUE_LOCAL  = '[queue_local]'
+    
+    # ---  CONNECTION CONTROL
+    SESSION_END = '[end_session]'
+    SESSION_UNEXPECTED_END = '[unexpected_session_end]'
+
+    # --- APP CONTROL
+    APP_EXECUTION_ERROR = '[execution_error]'
+    
+    APP_UNKNOW_APPLICATION = '[unknow_application]'
 
 class MoonProfile :
     
@@ -89,12 +100,14 @@ class Planet :
         orbit_map_data = json.load( open( orbit_map_conf_path ) )
         
         self.name  = orbit_map_data["planet"]["name"]
-
-        self.moons = {}
         
+        self.moon_profiles = {}
+        
+        # --- Registering Moons (Slave Hosts)
+         
         for moon_name in orbit_map_data["moons"] :
             
-            self.moons[ moon_name ] = MoonProfile(
+            self.moon_profiles[ moon_name ] = MoonProfile(
                                             moon_name , 
                                             orbit_map_data["moons_flight_route"][ moon_name ]["ip"] , 
                                             orbit_map_data["moons_flight_route"][ moon_name ]["port"] 
@@ -102,7 +115,7 @@ class Planet :
             
     def __getitem__( self , moon_name ):
         
-        return self.moons[ moon_name ]
+        return self.moon_profiles[ moon_name ]
         
     def __str__( self ):
         
@@ -112,7 +125,7 @@ class Planet :
         tmp.append( self.name )
         tmp.append( '][moons]' )
         
-        for moon in self.moons.values():
+        for moon in self.moon_profiles.values():
             
             tmp.append('[')
             tmp.append(moon.name)
@@ -120,7 +133,7 @@ class Planet :
         
         return ''.join(tmp)
     
-    def launch_expeditions( self , tasks ):
+    def launch_expeditions( self , task_list ):
         
         # --- enqueue tasks on thread-safe struct
         
@@ -132,7 +145,7 @@ class Planet :
         
         self.log.show( '[filling up task queue]' )
         
-        for task in tasks :
+        for task in task_list :
             
             task_queue.put( task )
         
@@ -140,7 +153,7 @@ class Planet :
         
         # --- lauching expeditions
         
-        for moon in self.moons.values():
+        for moon in self.moon_profiles.values():
             
             self.log.show( '[preparing expedition to]'+str(moon) )
             
@@ -154,14 +167,16 @@ class Planet :
             
         # --- wait for finnish
         
-        self.log.show( '[wait for expeditions ...]' )
+        self.log.show( '[wait for expeditions ending]' )
         
         while True :
             
             if sum( [ exp.is_alive() for exp in expeditions ] ) == 0 :
                 
                 break
-            
+        
+        # --- done
+        
         self.log.show( '[all expeditions are done!]' )
           
         return result_queue
@@ -177,14 +192,9 @@ class Planet :
 #             |_|                                                                                              
 # ------------------------------------------------------------------------------------------------------------
 
-class Schedule :
-    
-    MASTER_QUEUE = 0 # the tasks are 1 per time to slave hosts.
-    SLAVE_QUEUE  = 1 # slave hosts know exactly the amount of task they need to do.
-
 class Expedition( Process ):
     
-    def __init__( self , destination , task_queue , result_queue ):
+    def __init__( self , moon_destination_profile , task_queue , result_queue ):
         
         # --- cool stuff setup
 
@@ -192,11 +202,11 @@ class Expedition( Process ):
         
         self.log = VyLog( self )
         
-        # ---
+        # --- We can user this serial codes to implement "recover session" schemes in the future!
         
         self.serial       = get_serial_code( self )
         
-        self.destination  = destination
+        self.destination  = moon_destination_profile # - I dont know why but this is a tuple only of (ip/port)
         
         self.task_queue   = task_queue
         
@@ -208,35 +218,58 @@ class Expedition( Process ):
         
         connection_to_moon = VySocketClient( )
         
+        self.log.show('[bgn of expedition]['+self.serial+'][to]['+self.destination.name+']' )
+        
         try :
                 
-            self.log.show( '[contacting control tower from '+self.destination[0]+'/'+str(self.destination[1])+' for permission to flight]' )
-                 
-            connection_to_moon.connect( self.destination ) 
-                
+            self.log.show( '[contacting control tower from '+ str( self.destination.get_connection_tuple() )+' for permission to flight]' )
+            
+            connection_to_moon.connect( self.destination.get_connection_tuple() )
+            
             self.log.show( '[permission aquired! sending tasks to the moon]' )
-
+            
+            self.log.show( '[setting queue behavior]'
+            
+            connection_to_moon.send( PROTOCOL.QUEUE_REMOTE )
+            
             # --- doing tasks - loop
             while not self.task_queue.empty() :
                 
+                self.log.show('[so we still have task to be solved]' )
+                 
                 try :
+                    
+                    self.log.show('[dequeue task]')
+                    
                     tmp_task = self.task_queue.get() 
                     
                     self.log.show( '[sending task]['+tmp_task.serial+']' )
                     
                     connection_to_moon.send( str(tmp_task) )
                     
+                    self.log.show( '[waiting for response from moon]['+self.destination.name+']' )
+                    
                     result = connection_to_moon.read()
 
-                    self.log.show( '[task is completed][enqueue results]' )
+                    self.log.show( '[task]['+tmp_task.serial+'][is completed][enqueue on results]' )
                     
                     self.result_queue.put( result )
                     
                 except :
                     
+                    self.log.show( '[something goes wrong on send or receive state]' )
+                    
+                    self.log.show( '[re-enqueue task]['+tmp_task.serial+']' )
+                    
+                    self.task_queue.put( tmp_task )
+                    
+                    self.log.show( '[shutting down expedition]' )
+                    
                     print_exc()
+                    
                     connection_to_moon.close()
-                    exit(1)
+                    
+                    break
                     
             self.log.show( '[expedition is done!]' )
             
@@ -246,10 +279,12 @@ class Expedition( Process ):
                  
         except :
             
-            print_exc()  
+            self.log.show('[cant connect to moon]['+self.destination.name+']')
             
-            exit(1)
-            
+            print_exc()
+        
+        self.log.show('[end of expedition]['+self.serial+'][to]['+self.destination.name+']' )
+
 # -------------------------------------------------------------------------------
 #  _______        _               _         _                  _   _             
 # |__   __|      | |        /\   | |       | |                | | (_)            
@@ -259,6 +294,8 @@ class Expedition( Process ):
 #    |_|\__,_|___/_|\_\ /_/    \_\_.__/|___/\__|_|  \__,_|\___|\__|_|\___/|_| |_|
 #                                                                                
 # -------------------------------------------------------------------------------
+
+# this is a class for a user not for r
 
 class Task :
     
@@ -270,8 +307,6 @@ class Task :
             
             "app" : "app_name"
              
-            ,
-            
             "argv" : 
             {
                 "task_argv_1"     : "task_argv_value_1" ,
@@ -302,6 +337,19 @@ class Task :
     def __str__( self ):
         
         return json.dumps( { 'serial' : self.serial , 'app' : self.app , 'argv' : self.argv } , indent=4, separators=(',', ': ') )
+
+
+def recover_task( folder , taskname , qtt ):
+    
+    if not os.path.exists( folder ):
+        
+        return None
+        
+    else :
+        
+        task = ''.join( open( os.path.abspath( folder ) + '/' + taskname ) )
+        
+        return [ task for i in xrange( qtt ) ]
 
 def get_serial_code( class_instance ):
     

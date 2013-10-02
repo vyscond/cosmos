@@ -51,19 +51,26 @@ class GeneticAlgorithm :
             for tour in sorted( self.population , key = lambda tour : tour.cost() ):
                 
                 self.log.show( '[tour][' + str( self.population.index( tour ) ) + '][cost][' + str( tour.cost() ) + ']' )
-
-            # --- crossover
-
-            self.log.show( '[crossover]' )
-
-            for i in xrange( self.population_length ) :
                 
+            # --- crossover
+                
+            self.log.show( '[crossover]' )
+                
+            for i in xrange( self.population_length ) :
+                 
                 try :
                     
-                    self.log.show( str( self.population[ i ] + self.population[ i + 1 ] ) )
-                    self.log.show( str( self.population[ i + 1 ] + self.population[ i ] ) )
-
+                    self.log.show( '[father]' + str( self.population[i] ) )
+                    self.log.show( '[mother]' + str( self.population[i+1] ) )
+                    
+                    # --------------------------------------------------------
+                    
+                    self.log.show( str( self.population[ i ]     + self.population[ i + 1 ] ) )
+                    self.log.show( str( self.population[ i + 1 ] + self.population[ i ] )     )
+                    
                 except :
+                    
+                    print_exc()
                     
                     pass
 
@@ -92,9 +99,9 @@ class Tour :
                 pass
                 
         return tmp_sum
-
+        
     def __add__( self , other_tour ): # crossover
-
+        
         try : 
             
             # 1 - self tour dna
@@ -102,9 +109,9 @@ class Tour :
             # 0 - other tour dna
             
             bitmask = [ randint(0,1) for x in xrange( self.path_length ) ]
-
+            
             new_path = []
-
+            
             for i in xrange( self.path_length ) :
                 
                 if bitmask[i] == 1:
@@ -116,8 +123,10 @@ class Tour :
                     new_path.append( other_tour[i] )
                     
             # ---
-            
+             
         except :
+            
+            self.log.show('[error at crossover]')
             
             print_exc()
 
@@ -137,9 +146,7 @@ class Tour :
             
         tmp +=']'
         return tmp
-
-
-
+        
 class City :
 
     def __init__( self , name , x , y ):

@@ -182,38 +182,88 @@ class Moon :
         self.socket_client = None
         self.ip            = netifaces.ifaddresses('enp2s0')[netifaces.AF_INET][0]['addr']
         self.port          = 666
-        # --- Network ---[end] 
-
-    def close_connections( self ):
+        # --- Network ---[end]
+    
+    def end_session( self ):
         
-        try : 
+        try : # trying to close connection with master
             
-            self.log.dump( '[try to close all connections]' )
-             
-            if self.socket_server :
-                
-                self.socket_server.close()
-                
-                self.log.dump( '[socket_server was successfully closed]' )
-            
-            else :
-
-                self.log.dump( '[socket_server is already closed]' )
-
-            if self.socket_client :
-                
-                self.socket_client.close()
-                
-                self.log.dump( '[socket_client was successfully closed]' )
-
-            else :
-
-                self.log.dump( '[socket_client is already closed]' )
+            self.socket_client.close()
             
         except :
             
-            self.log.dump( format_exc() )
-
+            return 1 # cant close connection
+            
+        return 0
+     
+    def remote_queue( self  ):
+        
+        # --- Connection with master is already up
+        
+        try : # --- Waiting for Tasks to solve or Control Message
+            
+            message = self.socket_client.read()
+            
+        except :
+            
+            self.log.dump( '[problem on reading data from master]' )
+            
+            return PROTOCOL.END_SESSION
+            
+        try : # --- Ok we got a new message from master! Let's check the type of message
+            
+            message_as_json = json.dumps( message )
+            
+            if message_as_json["message_type"] == MessageType.CONTROL_MESSAGE :
+                
+                # Closing Session and getting back to wait another session
+                if message_as_json["control_message"] == ControlMessages.END_SESSION : 
+                    
+                    self.socket_client.close() 
+                    
+                    break
+                    
+            elif message_as_json["message_type"] == MessageType.TASK :
+                
+                application_name = message_as_json["app"]
+                
+                application_argv = message_as_json["argv"]
+                
+                try : # --- Executing Task with Respective Application
+                    
+                    self.log.dump( '[importing and executiong app]['+application_name+']' )
+                    
+                    result = getattr( __import__( application_name ) , 'App' )().run( application_argv )
+                    
+                    self.log.dump( '[execution done!]' )
+                    
+                    self.log.dump( '[appending result]' )
+                    
+                except :
+                    
+                    # --- Something goes worng on the task execution!
+                    
+                    self.log.dump( '[an error has ocurried on execution of app]' )
+                    
+                    self.log.dump( '[appending error msg on task]' )
+                    
+                    result = format_exc().replace('\n', '\\n')
+                
+                # --- Appending Result
+                 
+                message_as_json["result"] = result
+                
+                self.log.dump( '[read to another task]' )
+                
+        except :
+            
+            self.log.dump( '[bad formmating message]' )
+            
+            self.socket_client.send( ControlMessages.JSON_UNKNOW_MESSAGE_FORMAT )
+            
+            self.log.dump( '[control message sent]' )
+            
+            
     def run(self):
         
         self.log.dump( '[building the socket_server]' )
@@ -231,9 +281,9 @@ class Moon :
             
             daemon_stop( self )
         
-        # --- socket server are binded! we are ready to receive connection from planet
+        # --- socket server is binded! we are ready to receive connection from planet
         
-        self.log.dump( '[socket_server are binded and listening! moon is ready to receive expeditions]' )
+        self.log.dump( '[socket_server is binded and listening! moon is ready to receive expeditions]' )
         
         # --- main loop to received the expedition's tasks
 
@@ -265,43 +315,59 @@ class Moon :
             
             try :
                 
-                while True:
+                queue_type = self.socket_client.read()
+                
+                if queue_type = PROTOCOL.QUEUE_REMOTE :
                     
-                    # reading incomming packets
-                    
-                    self.log.dump( '[reading data from client]' )
-                    
-                    data_from_client = self.socket_client.read()
-                    
-                    if data_from_client == PROTOCOL.END_SESSION :
+                    try :
+                     
+                        while True:
+                            
+                            # reading incomming packets
+                            
+                            self.log.dump( '[reading data from client]' )
+                            
+                            data_from_client = self.socket_client.read()
+                            
+                            if data_from_client == PROTOCOL.END_SESSION :
+                                
+                                self.log.dump( '[there is no more tasks for me. byebye!]' )
+                                self.socket_client.close()
+                                
+                                break
+                                
+                            else :
+                                
+                                self.log.dump( '[we have got a new task! casting to object]' )
+                                
+                                json_task = Task( data_from_client ) 
+                                
+                                self.log.dump( '[invoking '+json_task.app+' to solve task]' )
+                                
+                                result = getattr( __import__( json_task.app ) , 'App' )().run( json_task.argv )
+                                
+                                self.log.dump( '[task was solved. returning result]' )
+                                
+                                self.socket_client.send( result )
+                                
+                                self.log.dump( '[taks result was delivered]' )
                         
-                        self.log.dump( '[there is no more tasks for me. byebye!]' )
+                    except :
+                        
+                        self.log.dump( '[something goes wrong while reading tasks from client]' ) 
+                        
+                        self.log.dump( format_exc() )
+                        
                         self.socket_client.close()
                         
                         break
-                        
-                    else :
-                        
-                        self.log.dump( '[we have got a new task! casting to object]' )
-                        
-                        json_task = Task( data_from_client ) 
-                        
-                        self.log.dump( '[invoking '+json_task.app+' to solve task]' )
-                        
-                        result = getattr( __import__( json_task.app ) , 'App' )().run( json_task.argv )
-                        
-                        self.log.dump( '[task was solved. returning result]' )
-                        
-                        self.socket_client.send( result )
-                        
-                        self.log.dump( '[taks result was delivered]' )
-                        
+            
             except :
                 
-                self.log.dump( '[something goes wrong while reading tasks from client]' ) 
-                self.log.dump( format_exc() )
+                self.log.dump( '[there is no such time of queue]' )
                 
                 break
+
 
 
 class Task :
@@ -352,9 +418,42 @@ def get_serial_code( class_instance ):
     return str(time.localtime(time.time())[0:6]).replace(', ','').replace('(','').replace(')','') + str( id( class_instance ) )
 
 
-class PROTOCOL :
+class ControlMessages : 
     
-    END_SESSION = 'NOMORETASKS_CLOSINGCONNECTION'
+    END_SESSION = 'end_session'
+
+    JSON_END_SESSION = '''
+    {
+        type : control_message
+        
+            ,
+
+        control_message : end_session 
+    }
+    '''
+    
+    # -------------------------------
+    
+    UNKNOW_MESSAGE_FORMAT = 'unknow_message_format'
+     
+    JSON_UNKNOW_MESSAGE_FORMAT = '''
+    {
+        type : control_message
+            
+            ,
+            
+        control_message : unknow_message_format
+
+    }
+    '''
+    
+    # ------------------------------
+
+class MessageType :
+    
+    CONTROL_MESSAGE = 'control_message'
+
+    TASK            = 'task'
 
 if __name__ == "__main__":
 
@@ -367,21 +466,23 @@ if __name__ == "__main__":
             daemon_start( moon )
             
         elif 'stop' == sys.argv[1]:
-
+            
             daemon_stop( moon )
-
+            
         elif 'restart' == sys.argv[1]:
-
+            
             daemon_restart( moon )
-
+            
         else:
-
+            
             print "Unknown command"
-
+            
             sys.exit(2)
-
+            
         sys.exit(0)
     else:
+        
         print "usage: %s start|stop|restart" % sys.argv[0]
+        
         sys.exit(2)
 
