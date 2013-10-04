@@ -228,7 +228,7 @@ class Expedition( Process ):
             
             self.log.show( '[permission aquired! sending tasks to the moon]' )
             
-            self.log.show( '[setting queue behavior]'
+            self.log.show( '[setting queue behavior]')
             
             connection_to_moon.send( PROTOCOL.QUEUE_REMOTE )
             

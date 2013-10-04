@@ -1,6 +1,7 @@
 import logging
 import time
 import json
+
 '''
 
 +----------+---------------------------------------------------------------------------
@@ -40,6 +41,14 @@ class TaskRequest :
         
         self.serial = get_serial_code( self )
         
+    def builds( self , network_message ):
+        
+        data = json.loads( network_message )["data"]
+        
+        self.app = data["app"]
+        self.argv = data["argv"]
+        self.serial = data["serial"]
+
     def __str__( self ):
         
         return json.dumps( { 'message_type' : 'task_request' , 'data' : { 'app' : self.app , 'serial' : self.serial , 'argv' : self.argv } } , indent=4, separators=(',', ': ') )
@@ -105,3 +114,25 @@ class SessionControl :
         }
     }
     '''
+
+# --- utils
+def extract_message_type( self , msg ):
+    
+    if data == dict :
+        
+        return msg["message_type"]
+        
+    elif data == str :
+        
+        return json.loads( msg )["message_type"]
+        
+def extract_message_data( self , msg ):
+    
+    if data == dict :
+        
+        return msg["data"]
+        
+    elif data == str :
+        
+        return json.loads( msg )["data"]
+        

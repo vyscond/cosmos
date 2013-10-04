@@ -1,0 +1,14 @@
+[Unit]
+Description=Moon Server Instance from Cosmos Framework
+
+[Service]
+Type=forking
+WorkingDirectory=/home/cosmos/
+PIDFile=/tmp/moonserver.pid
+ExecStart=/usr/bin/python2 /home/cosmos/cosmos.py moonserver start
+ExecStop=/usr/bin/python2 /home/cosmos/cosmos.py moonserver stop
+ExecReload=/usr/bin/python2 /home/cosmos/comos.py moonserver reload
+
+[Install]
+WantedBy=multi-user.target
+

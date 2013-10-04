@@ -1,5 +1,5 @@
 [Unit]
-Description=Moon from Cosmos Framework
+Description=Moon Server Instance from Cosmos Framework
 
 [Service]
 Type=forking
