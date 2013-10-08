@@ -1,9 +1,14 @@
 import json
 from cosmos import TaskRequest , Planet
 
-hello_task_request = TaskRequest( "sayhelloworldto" , { "name" : "cosmos" } )
+p = Planet( 'tanis.orbit' )
 
-r = Planet( 'tanis.orbit' ).launch_expeditions( [ hello_task_request ] )
+t = TaskRequest( app='helloworld' , argv='{ "name" : "josephin" }' )
 
-print r.get()["result"]["say_hello_tp"]
-print type( r.get() )
+print '[My Sides][task request]' , t
+
+qr = p.launch_expeditions( [ t ] )
+
+r = qr.get()
+
+print r
