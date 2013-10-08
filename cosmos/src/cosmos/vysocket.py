@@ -1,8 +1,20 @@
+#
+# Owner
+#   Ramon M. "Vyscond"
+#
+# email
+#   vyscond@gmail.com
+#
+# github
+#   vyscond
+#
+# twitter
+#   @vyscond
+#
+#
+# License 
+#   This software is licensed under GNU General Public License, version 3 (GPL-3.0)
 
-# owner   : Ramon Moraes "Vyscond" 
-# github  : https://github.com/vyscond
-# email   : vyscond@gmail.com
-# license : GNU General Public License v3
 
 import socket as pysocket
 import logging
