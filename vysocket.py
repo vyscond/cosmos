@@ -20,8 +20,6 @@ import socket as pysocket
 import logging
 from traceback import print_exc , format_exc
 
-logging.basicConfig(filename='/tmp/vysocket.log',level=logging.DEBUG)
-
 class TCPSocketServer :
 
     def __init__( self ):

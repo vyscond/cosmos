@@ -16,7 +16,7 @@
 #   This software is licensed under GNU General Public License, version 3 (GPL-3.0)
 
 import json
-from cosmos import TaskRequest , Planet
+from cosmos.cosmos import TaskRequest , Planet
 
 p = Planet( 'tanis.orbit' )
 

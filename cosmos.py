@@ -1,24 +1,24 @@
-#
-# Owner
-#   Ramon M. "Vyscond"
-#
-# email
-#   vyscond@gmail.com
-#
-# github
-#   vyscond
-#
-# twitter
-#   @vyscond
-#
-#
-# License 
-#   This software is licensed under GNU General Public License, version 3 (GPL-3.0)
+'''
 
-import logging , json , sys , time , os , netifaces , importlib
-from vysocket  import TCPSocketClient , TCPSocketServer
-from multiprocessing import Process , Queue , Pool
-from traceback import print_exc ,  format_exc
+Cosmos 
+
+An python message-oriented middleware
+
+
+'''
+
+from __future__ import with_statement
+
+__author__ = 'Ramon M.'
+__version__ = '0.1.0'
+__license__ = 'GPL-3.0'
+
+import json , sys , time , os , netifaces , importlib
+
+from vysocket import TCPSocketClient , TCPSocketServer
+from vylog    import VyLog
+from multiprocessing  import Process , Queue , Pool
+from traceback        import print_exc ,  format_exc
 
 class util :
     
@@ -32,7 +32,9 @@ class util :
         
         return str(time.localtime(time.time())[:6])[1:-1].replace(', ','')+str(id( class_instance))
 
-class NetworkMessage :
+class NetworkMessage : 
+    
+    # Deprecated for now.
     
     # addresser - remetente
     # addressee - destinatario
@@ -68,6 +70,12 @@ class NetworkMessage :
         
         return json.dumps( self , default=lambda o: o.__dict__ )
 
+class Arguments :
+    
+    def __init__( self , argv ):
+        
+        self.__dict__.update( json.loads(argv) )
+
 class TaskRequest :
     
     SUBJECT = 'task_request'
@@ -95,6 +103,14 @@ class TaskRequest :
     def append_arg( self , arg_name , arg_value ):
         
         self.argv[ arg_name ] = arg_value
+        
+    def to_object( self ):   
+        
+        return Arguments( self.argv )
+        
+    def get_TaskResponse( self ):
+        
+        return TaskResponse( self.app , self.serial )
         
     def __str__( self ):
         
@@ -176,8 +192,9 @@ class Moon :
         self.port = int(  moon_dict["port"] )
         
     def __str__( self ):
-        print 'dumping as string'
+        
         return json.dumps( self , default=lambda o: o.__dict__  , indent=4 )
+        
 
 class Planet :
     
@@ -196,12 +213,15 @@ class Planet :
             [ "moon_name" , { "ip" : "moon_ip" , "port" : moon_host } ]
         ]
     }
-
     '''
 
     def __init__( self , orbit_file_path ): # orbit file is a JSON formatted file :)
         
+        self.log = VyLog( self.__class__.__name__ ) 
+        
         # --- loading orbit configs - [bgn]
+        
+        self.log.show('loading orbit configs [bgn]')
         
         orbit_json = json.load( open( orbit_file_path ) )
         
@@ -212,76 +232,51 @@ class Planet :
         self.port = int( orbit_json["port"] ) # just make sure, ok?
         
         self.orbit = Orbit(orbit_json["moons"])
+        
+        self.log.show('loading orbit configs [end]')
             
         # --- loading orbit configs - [end]
     
     def launch_expeditions( self , task_request_list , moon_name_list=None ):
         
-        print '[launch_expeditions][begin]'
+        self.log.show('[bgn]')
         
-        # --- Walktrough ---
-        # 
-        # 1. Check if user want only few moons (slaves) to get the job done
-        #
-        #   1.1 - moon_name_list = None 
-        #
-        #        User want to use all available moons
-        #
-        #   1.2 - moon_name_list = []
-        #        
-        #        We Have to select specific moons
-        #
-        # 2. Converting the LIST of TaskRequests on a Thread/Process Safe QUEUE
-        #
-        # 3. Build a Thread/Process Safe QUEUE for the TaskResponses
-        #
-        # 4. Build the Expedition
-        #
-        # 5. Launch the Expedition
-        #
-        # 6. Loop on Checking if all Expeditions are done
-        #
-        # 7. Return TaskResponses QUEUE
-
-        # ---[ 1 ]
-        
-        print '[launch_expeditions][checking workers list]'
+        # ---[ 1 ]------------------------------------------------------
+        self.log.show( 'Checking Moon list sent by user' )
         
         working_moons = []
         
         if not moon_name_list :
             
-            print '[launch_expeditions][using all available workers]'
+            self.log.show( 'Using all available Moons on Orbit' )
             
             working_moons = self.orbit.values()
             
         else :
             
-            print '[launch_expeditions][using selective workers] -> ' + str( moon_name_list )
+            self.log.show( 'Using selective workers -> ' + str( moon_name_list ) )
             
             working_moons = [ self.orbit.get_moon( moon_name ) for moon_name in moon_name_list ]
-        
-        print working_moons
             
         # ---[ 2 ]------------------------------------------------------
-        
-        print '[launch_expeditions][building queues]'
+        self.log.show( 'Build Thread-safe Queues' )
         
         taskresponse_queue = Queue()
         
         taskrequest_queue  = Queue()
         
-        print '[launch_expeditions][putting task requests on Queue]'
+        # ---[ 3 ]------------------------------------------------------
+        self.log.show( 'Enqueue tasks on Thread-safe Queue object' )
         
         for taskrequest_obj in task_request_list : 
             
-            print '[launch_expeditions][putting task requests on Queue][enqueue]' + str(taskrequest_obj)
+            print '[Planet][launch_expeditions][3.1][enqueue task]' + str(taskrequest_obj)
             
             taskrequest_queue.put( str(taskrequest_obj) ) # "Normal" Objects are note thread safe!
             
         # ---[ 4 ]------------------------------------------------------
         
-        print '[launch_expeditions][Building and Indexing Process]'
+        self.log.show( 'Building and Indexing Process Objects' )
         
         running_expeditions = []
         
@@ -291,15 +286,15 @@ class Planet :
             
         # ---[ 5 ]------------------------------------------------------
         
-        print '[launch_expeditions][Starting up Process]'
+        self.log.show( 'Starting up Process' ) 
         
         for expedition in running_expeditions : 
             
             expedition.start()
-        
+            
         # ---[ 6 ]------------------------------------------------------
         
-        print '[launch_expeditions][waitting process termination]'
+        self.log.show( 'waitting process join]' )
         
         while True:
             
@@ -309,13 +304,17 @@ class Planet :
          
         # ---[ 7 ]
         
-        print '[launch_expeditions][process is done]'
+        self.log.show('[end]')
         
         return taskresponse_queue
 
 class Expedition( Process ) :
     
     def __init__( self , planet_name , moon_name , moon_ip , moon_port , task_request_queue , task_response_queue ):
+        
+        self.log = VyLog( self.__class__.__name__ )
+        
+        self.log.show('Creating Instance of Super Class "Process"')
         
         super( Expedition , self ).__init__()
         
@@ -333,31 +332,51 @@ class Expedition( Process ) :
         
     def run( self ):
         
-        print '[Expedition]['+str(id(self))+'][bgn]'
+        self.log.show('[bgn]')
         
         try :
             
+            self.log.show('Entering on main loop')
+            
             while not self.task_request_queue.empty() :
+                
+                self.log.show( 'Task Queue is not empty' )
                 
                 moon_connection = TCPSocketClient()
                 
+                self.log.show( 'Contacting Base at Moon@'+self.moon_name )
+                
                 moon_connection.connect( self.moon_ip , self.moon_port ) # Moon(Slave Host) is down.
+                
+                self.log.show( 'We have permission to flight' )
                 
                 task_request_json_str = self.task_request_queue.get()
                 
+                self.log.show( 'Flying to Moon@'+self.moon_name )
+                
                 moon_connection.send( task_request_json_str )
+                
+                self.log.show( 'Expedition has landing! Waiting to get back to home.' )
                 
                 task_response_json_str = moon_connection.read()
                 
+                self.log.show( 'Comming back to home with result' )
+                
+                self.log.show( 'Response : ' + task_response_json_str )
+                
+                self.log.show( 'Enqueue response to TaskResponse Queue' )
+                
                 self.task_response_queue.put( task_response_json_str )
+                
+                self.log.show( 'Shuttingdown Connection' )
                 
                 moon_connection.close()
                 
         except :
             
             print_exc()
-        
-        print '[Expedition]['+str(id(self))+'][end]'    
+            
+        self.log.show('[end]')
 
 # +--------------------------------------------------------------------+
 #
@@ -404,9 +423,9 @@ class Application :
         
     def run( self , taskrequest_obj ):
         
-        taskresponse_obj = TaskResponse( taskrequest_obj.app , taskrequest_obj.serial )
+        #taskresponse_obj = TaskResponse( taskrequest_obj.app , taskrequest_obj.serial )
         
-        #os.chdir( os.path.expanduser( Directory.MOONSERVER ) )
+        taskresponse_obj = taskrequest_obj.get_TaskResponse()
         
         print '[Application][run][current dir]['+str(os.getcwd())+']'
         
@@ -418,6 +437,9 @@ class Application :
             print self.boot_module.split('.')[-1]
             
             app = __import__( self.boot_module , globals() , locals() , [ self.boot_module.split('.')[-1] ] , -1 )
+            print ' >>> app >>> ' , app.__file__
+            
+            os.chdir(  os.path.dirname( app.__file__ ) )
             
             #app = importlib.import_module( self.boot_module )
             
@@ -427,7 +449,7 @@ class Application :
             
             print '[Application][run][executing app]'
             
-            taskresponse_obj.result , taskresponse_obj.error = app.run( taskrequest_obj.argv , result_queue , error_queue )
+            taskresponse_obj.result , taskresponse_obj.error = app.run( taskrequest_obj.to_object() , result_queue , error_queue )
             
             print '[Application][run][done execution]'
             
@@ -443,7 +465,6 @@ class Application :
     
 class Directory :
     
-    MOONSERVER       = '~/.cosmos/moonserver'
     APPLICATIONS     = '~/.cosmos/moonserver/applications'
     APPLICATION_PROFILES = '~/.cosmos/moonserver/applications_map'
 
@@ -502,10 +523,6 @@ class MoonServer :
                     
                 # ---[ 2.4 ]--- directorys -----------------------------
                 self.log('[__init__][config file][extrac info][directorys]')
-                
-                if moonserver_config_dict["directorys"]["moonserver"] != Directory.MOONSERVER :
-                    
-                    Directory.MOONSERVER = moonserver_config_dict["directorys"]["moonserver"]
                     
                 if moonserver_config_dict["directorys"]["applications"] != Directory.APPLICATIONS :
                     
@@ -557,11 +574,21 @@ class MoonServer :
                     
             except :
                 
+                print_exc()
+                
                 self.log( '[__init__][error][wrong json formating on profile][application will not be indexed]' )
                 
-                continue
                 
-        sys.path.append( os.path.expanduser( Directory.APPLICATIONS ) ) 
+                
+        sys.path.append( os.path.expanduser( Directory.APPLICATIONS ) )
+        
+    def start( self ):
+        
+        self.run()
+        
+    def stop( self ):
+        
+        pass
         
     def run( self ):
         
@@ -571,9 +598,9 @@ class MoonServer :
         
         try :
             
-            self.log( '[Moonserver][run][setting up to bind]' )
-            
             self.ip = netifaces.ifaddresses(self.network_device)[netifaces.AF_INET][0]['addr']
+            
+            self.log( '[Moonserver][run][setting up to bind]['+self.ip+'/'+str(self.port)+']' )
             
             server = TCPSocketServer()
             
@@ -595,11 +622,13 @@ class MoonServer :
                 
         except :
             
+            print_exc() 
+            
             server.close()
             
             client.close()
             
-            print_exc()
+            
             
             exit(0)
     
@@ -633,9 +662,9 @@ class MoonServer :
             
         return 0
         
-if __name__ == '__main__':
-    
-    if len(sys.argv) == 2 :
-        
-        print 'running cosmos as a moon slave host'
-        MoonServer( sys.argv[1] ).run()
+#if __name__ == '__main__':
+#    
+#    if len(sys.argv) == 2 :
+#        
+#        print 'running cosmos as a moon slave host'
+#        MoonServer( sys.argv[1] ).run()
