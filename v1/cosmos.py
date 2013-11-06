@@ -10,7 +10,7 @@ An python message-oriented middleware
 from __future__ import with_statement
 
 __author__ = 'Ramon M.'
-__version__ = '0.1.0'
+__version__ = '1.0.0'
 __license__ = 'GPL-3.0'
 
 import json , sys , time , os , netifaces , importlib
@@ -100,6 +100,9 @@ class TaskRequest :
             
             self.serial = util.get_serial_code( self )
             
+        self.await_time     = 0
+        self.execution_time = 0
+        
     def append_arg( self , arg_name , arg_value ):
         
         self.argv[ arg_name ] = arg_value
@@ -114,7 +117,7 @@ class TaskRequest :
         
     def __str__( self ):
         
-        return json.dumps( self , default=lambda o: o.__dict__  , indent=4 )
+        return json.dumps( self , default=lambda o: o.__dict__ )
 
 class TaskResponse : 
     
@@ -140,30 +143,30 @@ class TaskResponse :
         
     def __str__( self ):
          
-        return json.dumps( self , default=lambda o: o.__dict__  , indent=4 )
+        return json.dumps( self , default=lambda o: o.__dict__ )
 
-class SessionControl :
-    
-    SUBJECT = "session_control"
-    
-    MESSAGE_BSRQ = { "message" : "BSRQ" } # BEGIN SESSION REMOTE QUEUE
-    
-    MESSAGE_ESRQ = { "message" : "ESRQ" } # END SESSION REMOTE QUEUE
-
-    MESSAGE_BSLQ = { "message" : "BSLQ" } # BEGIN SESSION LOCAL QUEUE
-    
-    MESSAGE_ESLQ = { "message" : "ESLQ" } # END SESSION LOCAL QUEUE
-    
-    @staticmethod
-    def to_dict( session_control_str_json ):
-        
-        try :
-            
-            return json.loads( session_control_str_json )
-            
-        except :
-            
-            return None
+#class SessionControl :
+#    
+#    SUBJECT = "session_control"
+#    
+#    MESSAGE_BSRQ = { "message" : "BSRQ" } # BEGIN SESSION REMOTE QUEUE
+#    
+#    MESSAGE_ESRQ = { "message" : "ESRQ" } # END SESSION REMOTE QUEUE
+#
+#    MESSAGE_BSLQ = { "message" : "BSLQ" } # BEGIN SESSION LOCAL QUEUE
+#    
+#    MESSAGE_ESLQ = { "message" : "ESLQ" } # END SESSION LOCAL QUEUE
+#    
+#    @staticmethod
+#    def to_dict( session_control_str_json ):
+#        
+#        try :
+#            
+#            return json.loads( session_control_str_json )
+#            
+#        except :
+#            
+#            return None
 
 class Orbit( dict ):
     
@@ -437,8 +440,7 @@ class Application :
             print self.boot_module.split('.')[-1]
             
             app = __import__( self.boot_module , globals() , locals() , [ self.boot_module.split('.')[-1] ] , -1 )
-            print ' >>> app >>> ' , app.__file__
-            
+             
             os.chdir(  os.path.dirname( app.__file__ ) )
             
             #app = importlib.import_module( self.boot_module )
@@ -453,15 +455,16 @@ class Application :
             
             print '[Application][run][done execution]'
             
-            return taskresponse_obj
-            
         except:
             
             print '[Application][run][error][cant import application]'
             
             taskresponse_obj.error = "[cant import application]" + format_exc()
             
-            return taskresponse_obj
+        
+        os.chdir(Directory.APPLICATIONS)
+        
+        return taskresponse_obj
     
 class Directory :
     
@@ -578,8 +581,6 @@ class MoonServer :
                 
                 self.log( '[__init__][error][wrong json formating on profile][application will not be indexed]' )
                 
-                
-                
         sys.path.append( os.path.expanduser( Directory.APPLICATIONS ) )
         
     def start( self ):
@@ -624,11 +625,9 @@ class MoonServer :
             
             print_exc() 
             
-            server.close()
+            if server : server.close()
             
-            client.close()
-            
-            
+            if client : client.close()
             
             exit(0)
     
@@ -658,10 +657,6 @@ class MoonServer :
             
             print_exc()
             
-            return 0
-            
-        return 0
-        
 #if __name__ == '__main__':
 #    
 #    if len(sys.argv) == 2 :

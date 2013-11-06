@@ -1,5 +1,6 @@
 from sys import argv
 from traceback import print_exc
+
 try :
     
     from cosmos import MoonServer
@@ -10,5 +11,6 @@ try :
         
 
 except :
+
     print_exc()
     print 'cosmos [config_file] (start|stop|restart)'
