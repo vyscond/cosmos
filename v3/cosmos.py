@@ -10,30 +10,17 @@ An python message-oriented middleware
 from __future__ import with_statement
 
 __author__ = 'Ramon M.'
-__version__ = '2.0.0'
+__version__ = '3.0.0'
 __license__ = 'GPL-3.0'
 
-import json , sys , time , os , signal
+import sys , os , signal , time , json 
 # , netifaces , importlib
 
 from vysocket import TCPSocketClient , TCPSocketServer
 from vylog    import VyLog
-from multiprocessing  import Process , Queue , Pool
+from multiprocessing  import Process , Queue , Pool , Manager
 from traceback        import print_exc ,  format_exc
 import socket as pysocket
-
-
-class util :
-    
-    @staticmethod
-    def timestamp( ):
-        
-        return str( time.localtime()[:6] )
-        
-    @staticmethod
-    def get_serial_code( class_instance ):
-        
-        return str(time.localtime(time.time())[:6])[1:-1].replace(', ','')+str(id( class_instance))
 
 class Arguments :
     
@@ -46,7 +33,6 @@ class Arguments :
         else :
             
             self.__dict__.update( argv )
-            
 
 class Task :
     
@@ -77,7 +63,7 @@ class Task :
             
             self.argv = argv
             
-            self.serial = util.get_serial_code( self )
+            self.serial = str(time.localtime(time.time())[:6])[1:-1].replace(', ','')+str(id( class_instance))
             
             self.result         = result
             
@@ -113,7 +99,7 @@ class Orbit( dict ):
             
     def get_moon( self , moon_name ):
         
-        return Moon( moon_name , self.get( moon_name ) )
+        return self[ moon_name ]
         
     def __str__( self ):
          
@@ -176,144 +162,126 @@ class Planet :
     
     def launch_expeditions( self , task_request_list , moon_name_list=None ):
         
-        self.log.show('[bgn]')
+        global expedition
         
         # ---[ 1 ]------------------------------------------------------
+        
         self.log.show( 'Checking Moon list sent by user' )
         
         working_moons = []
         
         if not moon_name_list :
             
-            self.log.show( 'Using all available Moons on Orbit' )
+            self.log.show( 'Traveling to available Moons on Orbit' )
             
             working_moons = self.orbit.values()
             
         else :
             
-            self.log.show( 'Using selective workers -> ' + str( moon_name_list ) )
+            self.log.show( 'Traveling to ' + str( moon_name_list ) )
             
             working_moons = [ self.orbit.get_moon( moon_name ) for moon_name in moon_name_list ]
             
         # ---[ 2 ]------------------------------------------------------
-        self.log.show( 'Build Thread-safe Queues' )
         
-        taskresponse_queue = Queue()
+        self.log.show( 'Build Thread-safe Queues with no maximum size' )
         
-        taskrequest_queue  = Queue()
+        recv_queue = Manager().Queue( )#len(task_request_list) )
         
+        send_queue  = Manager().Queue( )#len(task_request_list) )
+
         # ---[ 3 ]------------------------------------------------------
-        self.log.show( 'Enqueue tasks on Thread-safe Queue object' )
         
-        for taskrequest_obj in task_request_list : 
+        self.log.show( 'Enqueue tasks on "send_queue" object' )
+        
+        for task_obj in task_request_list : 
             
-            print '[Planet][launch_expeditions][3.1][enqueue task]' + str(taskrequest_obj)
+            send_queue.put_nowait( str(task_obj) ) # "Normal" Objects are note thread safe!
             
-            taskrequest_queue.put( str(taskrequest_obj) ) # "Normal" Objects are note thread safe!
-            
+        self.log.show( 'send_queue = ' + str(send_queue.qsize())+'/'+str(len(task_request_list)) +  + 'tasks')
+        
         # ---[ 4 ]------------------------------------------------------
         
-        self.log.show( 'Building and Indexing Process Objects' )
+        self.log.show( 'Starting up Process Pool' )
+                
+        pool = Pool(processes=7)
+
         
-        running_expeditions = []
-        
+
         for moon in working_moons :
             
-            running_expeditions.append( Expedition( self.name , moon.name , moon.ip , moon.port , taskrequest_queue , taskresponse_queue ) )
-            
+            #running_expeditions.append( Process( target=expedition , args=(self.name , moon.name , moon.ip , moon.port , taskrequest_queue , taskresponse_queue, ) ) ) # Process Object
+            pool.apply_async( func=expedition , args=(self.name , moon.name , moon.ip , moon.port , send_queue , recv_queue , ) )
+
         # ---[ 5 ]------------------------------------------------------
         
-        self.log.show( 'Starting up Process' ) 
+        pool.close()
+        pool.join()
         
-        for expedition in running_expeditions : 
-            expedition.daemon = False
-            expedition.start()
+        self.log.show( 'recv_queue = '+ str(recv_queue.qsize())+'/'+str(len(task_request_list)) + 'tasks' )
+        
+        tmp = []
+        while not recv_queue.empty() :
             
-        # ---[ 6 ]------------------------------------------------------
-        
-        self.log.show( 'waitting process join]' )
-        
-        while True:
+            tmp.append( recv_queue.get() )
             
-            if sum( [ expedition.is_alive() for expedition in running_expeditions ] ) == 0 : 
-                
-                break
-                
-        # ---[ 7 ]
+        self.log.show( 'closing queue' )
         
+        recv_queue.close()
+        send_queue.close()
         
-        self.log.show( '[end][all process joinned]' )
+        self.log.show( 'return results' )
         
-        return taskresponse_queue
+        return tmp
 
-class Expedition( Process ) :
+def expedition( planet_name , moon_name , moon_ip , moon_port , send_q , recv_q ):
     
-    def __init__( self , planet_name , moon_name , moon_ip , moon_port , task_request_queue , task_response_queue ):
+    log = VyLog( 'Expedition' )
+          
+    log.show('Expedition to '+moon_name+' is launched')
+    
+    try :
         
-        self.log = VyLog( self.__class__.__name__ )
+        #log.show('Entering on main loop')
         
-        self.log.show('Creating Instance of Super Class "Process"')
-        
-        super( Expedition , self ).__init__()
-        
-        self.planet_name = planet_name
-        
-        self.moon_name = moon_name
-        
-        self.moon_ip   = moon_ip
-        
-        self.moon_port = moon_port
-        
-        self.task_request_queue = task_request_queue
-        
-        self.task_response_queue = task_response_queue
-        
-        self.status = 0
-        
-    def run( self ):
-        
-        self.log.show('[bgn]')
-        
-        try :
+        while not send_q.empty() :
             
-            self.log.show('Entering on main loop')
+            task_json_str = send_q.get()
             
-            while not self.task_request_queue.empty() :
-                
-                self.log.show( 'task queue is not empty' )
+            try :
                 
                 moon_connection = TCPSocketClient()
-                
-                self.log.show( 'connecting to moon@'+self.moon_name )
-                
-                moon_connection.connect( self.moon_ip , self.moon_port ) # Moon(Slave Host) is down.
-                
-                self.log.show( 'dequeue task' )
-                
-                task_json_str = self.task_request_queue.get()
-                
-                self.log.show( 'send task to moon@'+self.moon_name )
+            
+                #log.show( '['+moon_name+'] connecting' )
+            
+                moon_connection.connect( moon_ip , moon_port ) # Moon(Slave Host) is down.
                 
                 moon_connection.send( task_json_str )
-                
-                self.log.show( 'waiting result...' )
-                
+                                
                 task_json_str = moon_connection.read()
                 
                 moon_connection.close()
                 
-                self.log.show( 'task response [[' + task_json_str + ']]' )
                 
-                self.log.show( 'enqueue response' )
+            except :
                 
-                self.task_response_queue.put( task_json_str )
+                send_q.put( task_json_str )
                 
-            os.kill(self.pid, signal.SIGKILL)
+                log.show( 'Expedition on '+moon_name+' is aborted!' )
+                
+                log.show(format_exc())
+                
+                break
+                
+            recv_q.put_nowait( task_json_str )
             
-        except :
-            
-            print_exc()
-            
+    except :
+        
+        log.show( 'Expedition on '+moon_name+' is aborted!' )
+        
+        log.show(format_exc())
+        
+    log.show( 'Expedition on '+moon_name+' was a sucess! returning to home!' )
 
 # +--------------------------------------------------------------------+
 #
@@ -419,6 +387,8 @@ class MoonServer :
             self.application_dir = moon_cfg["directorys"]["applications"]
             self.application_profile_dir = moon_cfg["directorys"]["application_profiles"]
             
+            self.pidfile = moon_cfg["pid"]
+            
         except :
             
             print_exc()
@@ -461,13 +431,41 @@ class MoonServer :
         
         sys.path.append( os.path.expanduser( self.application_dir ) )
         
+        self.log.show('persisting pid -> ' + moon_cfg["pid"] )
+        
+        if not os.path.isfile(moon_cfg["pid"]):
+            
+            pid = open( self.pidfile , 'w' )
+            
+            pid.write(str( os.getpid() ))
+            
+            pid.close()
+        
     def start( self ):
         
         self.run()
         
     def stop( self ):
         
-        pass
+        if os.path.isfile(self.pidfile):
+            
+            pid = ''.join( open( self.pidfile , 'r' ) )
+            
+            try :
+
+                self.log.show('Kill moon server at PID '+pid)
+                
+                os.kill( int(pid) , 9 )
+                
+            except :
+                
+                self.log.show('pid file exist but process is already dead!')
+                
+            os.remove( self.pidfile )
+            
+        else :
+            
+            self.log.show('there is nothing to stop! .-.')
         
     def run( self ):
         
@@ -507,6 +505,8 @@ class MoonServer :
             
             if client : client.close()
             
+            self.stop()
+            
             exit(0)
     
     def solving_tasks( self , client ):
@@ -537,9 +537,3 @@ class MoonServer :
             
             print_exc()
             
-#if __name__ == '__main__':
-#    
-#    if len(sys.argv) == 2 :
-#        
-#        print 'running cosmos as a moon slave host'
-#        MoonServer( sys.argv[1] ).run()
