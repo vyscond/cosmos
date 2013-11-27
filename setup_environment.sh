@@ -4,6 +4,8 @@ moon_cfg="{\n    \n    \"name\" : \"$1\" ,\n    \"ip\"   : \"$2\" ,\n    \"port\
 
 strawberry_node="Description='A basic static ethernet connection'\nInterface=eth0\nConnection=ethernet\nIP=static\nAddress=('$2')\nSkipNoCarrier=yes\n"
 
+cd $4
+
 echo '[cosmos]['`pwd`'][creating folder hierarchy]'
 
 echo '[cosmos]['`pwd`'][creating moon folder]'
