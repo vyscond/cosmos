@@ -1,7 +1,0 @@
-{
-    "name"  : "The Hello World Application" ,
-    
-    "alias" : "helloworld" ,
-    
-    "boot_module" : "helloworld.helloworld"
-}
