@@ -15,5 +15,5 @@ setup(
     author_email='vyscond@gmail.com',
 
     py_modules=['cosmos','vylog','vysocket'],
-    scripts=['moon.py'],
+    scripts=['moon.py','moon_setup.sh'],
 )
